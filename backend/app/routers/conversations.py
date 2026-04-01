@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -98,14 +98,14 @@ async def list_conversations(
     ]
 
 
-@router.post("/{conversation_id}/messages", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/{conversation_id}/messages", response_model=list[MessageResponse], status_code=status.HTTP_201_CREATED)
 async def add_message(
     conversation_id: str,
     data: MessageCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Vérifier que la conversation appartient au user ou à son tenant
+    # Vérifier que la conversation existe et appartient au bon tenant
     result = await db.execute(
         select(Conversation).where(Conversation.id == conversation_id)
     )
@@ -117,22 +117,76 @@ async def add_message(
     if conversation.tenant_id != current_user.tenant_id:
         raise HTTPException(status_code=403, detail="Accès refusé")
 
-    message = Message(
+    # 1. Sauvegarder le message du user
+    user_message = Message(
         conversation_id=conversation.id,
         sender="user",
         content=data.content,
     )
-    db.add(message)
-    await db.commit()
-    await db.refresh(message)
+    db.add(user_message)
+    await db.flush()
 
-    return MessageResponse(
-        id=str(message.id),
-        sender=message.sender,
-        content=message.content,
-        token_count=message.token_count,
-        created_at=str(message.created_at),
+    # 2. Charger l'historique des messages pour le contexte
+    result = await db.execute(
+        select(Message)
+        .where(Message.conversation_id == conversation_id)
+        .order_by(Message.created_at)
     )
+    all_messages = result.scalars().all()
+
+    # 3. Construire l'historique au format OpenRouter
+    history = [
+        {"role": "user" if m.sender == "user" else "assistant", "content": m.content}
+        for m in all_messages
+    ]
+
+    # 4. Construire le system prompt avec le contexte du commercial
+    from app.services.prompts import COLLECTOR_SYSTEM_PROMPT
+
+    context = f"""
+{COLLECTOR_SYSTEM_PROMPT}
+
+CONTEXTE DE CETTE SESSION :
+- Commercial : {current_user.full_name}
+- Type : conversation avec l'agent collecteur
+"""
+
+    # 5. Appeler l'agent
+    from app.services.agent import get_agent_response
+
+    agent_reply = await get_agent_response(
+        system_prompt=context,
+        messages=history,
+    )
+
+    # 6. Sauvegarder la réponse de l'agent
+    agent_message = Message(
+        conversation_id=conversation.id,
+        sender="agent",
+        content=agent_reply,
+    )
+    db.add(agent_message)
+    await db.commit()
+    await db.refresh(user_message)
+    await db.refresh(agent_message)
+
+    # 7. Retourner les deux messages
+    return [
+        MessageResponse(
+            id=str(user_message.id),
+            sender=user_message.sender,
+            content=user_message.content,
+            token_count=user_message.token_count,
+            created_at=str(user_message.created_at),
+        ),
+        MessageResponse(
+            id=str(agent_message.id),
+            sender=agent_message.sender,
+            content=agent_message.content,
+            token_count=agent_message.token_count,
+            created_at=str(agent_message.created_at),
+        ),
+    ]
 
 
 @router.get("/{conversation_id}/messages", response_model=list[MessageResponse])
@@ -170,3 +224,58 @@ async def list_messages(
         )
         for m in messages
     ]
+
+@router.post("/{conversation_id}/close", response_model=ConversationResponse)
+async def close_conversation(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # Vérifier que la conversation existe
+    result = await db.execute(
+        select(Conversation).where(Conversation.id == conversation_id)
+    )
+    conversation = result.scalar_one_or_none()
+
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation introuvable")
+
+    if conversation.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=403, detail="Accès refusé")
+
+    if conversation.status == "completed":
+        raise HTTPException(status_code=400, detail="Conversation déjà clôturée")
+
+    # Charger les messages
+    result = await db.execute(
+        select(Message)
+        .where(Message.conversation_id == conversation_id)
+        .order_by(Message.created_at)
+    )
+    all_messages = result.scalars().all()
+
+    history = [
+        {"role": "user" if m.sender == "user" else "assistant", "content": m.content}
+        for m in all_messages
+    ]
+
+    # Extraire les données structurées
+    from app.services.agent import extract_conversation_data
+
+    extracted = await extract_conversation_data(history)
+
+    # Mettre à jour la conversation
+    conversation.status = "completed"
+    conversation.extracted_data = extracted
+    conversation.ended_at = func.now()
+    await db.commit()
+    await db.refresh(conversation)
+
+    return ConversationResponse(
+        id=str(conversation.id),
+        agent_type=conversation.agent_type,
+        status=conversation.status,
+        total_tokens=conversation.total_tokens,
+        started_at=str(conversation.started_at),
+        ended_at=str(conversation.ended_at) if conversation.ended_at else None,
+    )

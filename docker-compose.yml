@@ -32,6 +32,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me-in-production}
       JWT_ALGORITHM: HS256
       JWT_EXPIRE_MINUTES: 1440
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL}
     volumes:
       - ./backend/app:/app/app
     depends_on:
