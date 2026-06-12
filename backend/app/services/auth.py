@@ -1,30 +1,52 @@
-from datetime import datetime, timedelta, timezone
+"""Authentication business logic (registration, login)."""
 
-from jose import jwt
-from passlib.context import CryptContext
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+from app.core.exceptions import ConflictError, ForbiddenError, UnauthorizedError
+from app.core.security import create_access_token, hash_password, verify_password
+from app.models.user import User
+from app.schemas.auth import LoginRequest, RegisterRequest
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+def _token_for(user: User) -> str:
+    return create_access_token(
+        {"sub": str(user.id), "role": user.role.value, "tenant_id": str(user.tenant_id)}
+    )
 
 
-def create_access_token(data: dict) -> str:
-    to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+async def register_user(db: AsyncSession, data: RegisterRequest) -> tuple[User, str]:
+    """Create a user in an existing tenant and return it with its token."""
+    # Email is globally unique on the platform (login without tenant)
+    result = await db.execute(select(User).where(User.email == data.email))
+    if result.scalar_one_or_none():
+        raise ConflictError("Cet email est déjà utilisé")
+
+    user = User(
+        email=data.email,
+        password_hash=hash_password(data.password),
+        full_name=data.full_name,
+        phone=data.phone,
+        role=data.role,
+        tenant_id=data.tenant_id,
+        manager_id=data.manager_id,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user, _token_for(user)
 
 
-def decode_access_token(token: str) -> dict | None:
-    try:
-        return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
-    except Exception:
-        return None
+async def login_user(db: AsyncSession, data: LoginRequest) -> tuple[User, str]:
+    """Verify credentials and return the user with a fresh token."""
+    result = await db.execute(
+        select(User).where(User.email == data.email, User.tenant_id == data.tenant_id)
+    )
+    user = result.scalar_one_or_none()
+
+    if user is None or not verify_password(data.password, user.password_hash):
+        raise UnauthorizedError("Email ou mot de passe incorrect")
+    if not user.is_active:
+        raise ForbiddenError("Compte désactivé")
+
+    return user, _token_for(user)

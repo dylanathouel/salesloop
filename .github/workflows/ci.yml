@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: salesloop
+          POSTGRES_PASSWORD: salesloop
+          POSTGRES_DB: salesloop
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U salesloop"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+asyncpg://salesloop:salesloop@localhost:5432/salesloop
+      JWT_SECRET: ci-test-secret
+      OPENROUTER_API_KEY: ci-fake-key
+      OPENROUTER_MODEL: ci-fake-model
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Lint (ruff)
+        run: ruff check app tests && ruff format --check app tests
+      - name: Type check (mypy)
+        run: mypy app
+      - name: Tests (pytest)
+        run: pytest
