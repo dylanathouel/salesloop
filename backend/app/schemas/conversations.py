@@ -29,6 +29,7 @@ class ConversationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    user_id: uuid.UUID
     agent_type: AgentType
     status: ConversationStatus
     extracted_data: dict[str, Any] | None = None

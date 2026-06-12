@@ -1,7 +1,7 @@
 # Common commands for SalesLoop AI. Backend tooling (test/lint) runs locally:
 # create a venv with `make venv` first.
 
-.PHONY: up down logs migrate makemigration test lint format venv
+.PHONY: up down logs migrate makemigration test test-frontend lint format venv
 
 up:
 	docker compose up -d --build
@@ -24,6 +24,9 @@ test:
 	set -a && . ./.env && set +a && cd backend && \
 	DATABASE_URL="postgresql+asyncpg://$$DB_USER:$$DB_PASSWORD@localhost:5433/$$DB_NAME" \
 	.venv/bin/python -m pytest
+
+test-frontend:
+	cd frontend && npm test && npm run typecheck
 
 lint:
 	cd backend && .venv/bin/ruff check app tests && .venv/bin/ruff format --check app tests && .venv/bin/mypy app
