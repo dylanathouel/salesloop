@@ -76,6 +76,7 @@ async def test_manager_sees_team_conversations_only(
     manager: User,
     team_commercial: User,
     commercial: User,
+    fake_llm: FakeLLMProvider,
 ) -> None:
     team_conv = await _create_conversation(client, team_commercial)
     outside_conv = await _create_conversation(client, commercial)
@@ -97,7 +98,11 @@ async def test_manager_sees_team_conversations_only(
 
 
 async def test_direction_sees_all_tenant_conversations(
-    client: httpx.AsyncClient, direction: User, commercial: User, team_commercial: User
+    client: httpx.AsyncClient,
+    direction: User,
+    commercial: User,
+    team_commercial: User,
+    fake_llm: FakeLLMProvider,
 ) -> None:
     conv_a = await _create_conversation(client, commercial)
     conv_b = await _create_conversation(client, team_commercial)
@@ -108,7 +113,10 @@ async def test_direction_sees_all_tenant_conversations(
 
 
 async def test_commercial_cannot_see_colleague_conversation(
-    client: httpx.AsyncClient, commercial: User, team_commercial: User
+    client: httpx.AsyncClient,
+    commercial: User,
+    team_commercial: User,
+    fake_llm: FakeLLMProvider,
 ) -> None:
     conversation_id = await _create_conversation(client, team_commercial)
 

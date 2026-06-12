@@ -59,19 +59,44 @@ def _require_owner(conversation: Conversation, current_user: User) -> None:
 
 async def create_conversation(
     db: AsyncSession,
+    llm: LLMProvider,
     current_user: User,
     agent_type: AgentType,
-) -> Conversation:
-    """Start a new conversation for the current user."""
+) -> tuple[Conversation, Message | None]:
+    """Start a new conversation; the collector opens with a generated message.
+
+    The opening is generated before anything is persisted: if the LLM is
+    down, no half-created conversation is left behind. The trainer agent
+    has no opening yet (it arrives with the RAG phase).
+    """
+    opening = None
+    if agent_type == AgentType.COLLECTOR:
+        opening = await collector.generate_opening(llm, current_user)
+
     conversation = Conversation(
         tenant_id=current_user.tenant_id,
         user_id=current_user.id,
         agent_type=agent_type,
     )
     db.add(conversation)
+    await db.flush()
+
+    first_message: Message | None = None
+    if opening is not None:
+        first_message = Message(
+            conversation_id=conversation.id,
+            sender=MessageSender.AGENT,
+            content=opening.content,
+            token_count=opening.completion_tokens,
+        )
+        db.add(first_message)
+        conversation.total_tokens += opening.total_tokens
+
     await db.commit()
     await db.refresh(conversation)
-    return conversation
+    if first_message is not None:
+        await db.refresh(first_message)
+    return conversation, first_message
 
 
 async def list_conversations(db: AsyncSession, current_user: User) -> list[Conversation]:

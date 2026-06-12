@@ -35,3 +35,9 @@ class ConversationResponse(BaseModel):
     total_tokens: int
     started_at: datetime
     ended_at: datetime | None = None
+
+
+class ConversationStartResponse(ConversationResponse):
+    """Returned by POST /conversations: includes the agent's opening message."""
+
+    first_message: MessageResponse | None = None

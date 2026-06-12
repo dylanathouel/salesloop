@@ -9,6 +9,7 @@ from app.database import get_db
 from app.schemas.conversations import (
     ConversationCreate,
     ConversationResponse,
+    ConversationStartResponse,
     MessageCreate,
     MessageResponse,
 )
@@ -22,16 +23,20 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 Llm = Annotated[LLMProvider, Depends(get_llm_provider)]
 
 
-@router.post("/", response_model=ConversationResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=ConversationStartResponse, status_code=status.HTTP_201_CREATED)
 async def create_conversation(
     data: ConversationCreate,
     current_user: CurrentUser,
     db: DbSession,
-) -> ConversationResponse:
-    conversation = await conversations_service.create_conversation(
-        db, current_user, data.agent_type
+    llm: Llm,
+) -> ConversationStartResponse:
+    conversation, first_message = await conversations_service.create_conversation(
+        db, llm, current_user, data.agent_type
     )
-    return ConversationResponse.model_validate(conversation)
+    response = ConversationStartResponse.model_validate(conversation)
+    if first_message is not None:
+        response.first_message = MessageResponse.model_validate(first_message)
+    return response
 
 
 @router.get("/", response_model=list[ConversationResponse])

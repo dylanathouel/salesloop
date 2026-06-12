@@ -23,3 +23,21 @@ async def generate_reply(
 ) -> LLMResult:
     """Generate the agent's next reply given the full conversation history."""
     return await llm.chat(system_prompt=build_system_prompt(user), messages=history)
+
+
+async def generate_opening(llm: LLMProvider, user: User) -> LLMResult:
+    """Generate the agent's first message when a debriefing session starts.
+
+    The instruction below is synthetic (never persisted): it only prompts the
+    model to ask its opening question.
+    """
+    instruction: list[LLMMessage] = [
+        {
+            "role": "user",
+            "content": (
+                "(Le commercial vient d'ouvrir la session de debriefing. "
+                "Pose ta première question, conformément à tes consignes.)"
+            ),
+        }
+    ]
+    return await llm.chat(system_prompt=build_system_prompt(user), messages=instruction)
