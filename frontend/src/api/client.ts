@@ -67,3 +67,24 @@ export async function api<T>(
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
+
+/** multipart/form-data variant (file uploads); the browser sets the boundary. */
+export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(`${API_URL}${path}`, { method: "POST", headers, body: formData });
+
+  if (!response.ok) {
+    let detail = "Une erreur est survenue";
+    try {
+      const data = await response.json();
+      if (typeof data.detail === "string") detail = data.detail;
+    } catch {
+      // non-JSON error body: keep the generic message
+    }
+    throw new ApiError(response.status, detail);
+  }
+  return (await response.json()) as T;
+}

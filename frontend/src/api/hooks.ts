@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api } from "./client";
+import { api, apiUpload } from "./client";
 import type {
   AgentType,
   Conversation,
@@ -191,6 +191,43 @@ export function useUploadTraining() {
   return useMutation({
     mutationFn: (body: { title: string; content: string }) =>
       api<TrainingContent>("/training/", { method: "POST", body }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["training"] }),
+  });
+}
+
+export function useUploadTrainingFile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ title, file }: { title: string; file: File }) => {
+      const formData = new FormData();
+      formData.append("title", title);
+      formData.append("file", file);
+      return apiUpload<TrainingContent>("/training/upload", formData);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["training"] }),
+  });
+}
+
+export function useUpdateTraining() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      contentId,
+      ...body
+    }: {
+      contentId: string;
+      title?: string;
+      content?: string;
+    }) => api<TrainingContent>(`/training/${contentId}`, { method: "PATCH", body }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["training"] }),
+  });
+}
+
+export function useReindexTraining() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (contentId: string) =>
+      api<TrainingContent>(`/training/${contentId}/reindex`, { method: "POST" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["training"] }),
   });
 }

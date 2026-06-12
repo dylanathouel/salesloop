@@ -109,6 +109,7 @@ export interface Report {
 export interface TrainingContent {
   id: string;
   title: string;
+  raw_content: string;
   content_type: string;
   is_embedded: boolean;
   chunk_metadata: { chunk_count?: number };

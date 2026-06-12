@@ -4,12 +4,15 @@ import { ApiError } from "../api/client";
 import {
   useCreateUser,
   useDeleteTraining,
+  useReindexTraining,
   useTrainingContents,
+  useUpdateTraining,
   useUpdateUser,
   useUploadTraining,
+  useUploadTrainingFile,
   useUsers,
 } from "../api/hooks";
-import type { UserRole } from "../api/types";
+import type { TrainingContent, UserRole } from "../api/types";
 import { formatDate } from "../utils/format";
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -211,28 +214,39 @@ function UsersSection() {
 function TrainingSection() {
   const trainingQuery = useTrainingContents();
   const uploadMutation = useUploadTraining();
-  const deleteMutation = useDeleteTraining();
+  const uploadFileMutation = useUploadTrainingFile();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [fileInputKey, setFileInputKey] = useState(0);
+
+  const pending = uploadMutation.isPending || uploadFileMutation.isPending;
+  const error = uploadMutation.error ?? uploadFileMutation.error;
+
+  function resetForm() {
+    setTitle("");
+    setContent("");
+    setFile(null);
+    setFileInputKey((k) => k + 1); // remonte l'input file pour le vider
+  }
 
   function handleUpload(event: FormEvent) {
     event.preventDefault();
-    uploadMutation.mutate(
-      { title, content },
-      {
-        onSuccess: () => {
-          setTitle("");
-          setContent("");
-        },
-      },
-    );
+    if (file) {
+      uploadFileMutation.mutate({ title, file }, { onSuccess: resetForm });
+    } else {
+      uploadMutation.mutate({ title, content }, { onSuccess: resetForm });
+    }
   }
 
   return (
     <section>
       <h2 className="text-lg font-semibold">Contenus de formation</h2>
       <p className="text-sm text-zinc-500">
-        Ces documents alimentent l'agent d'entraînement de tes commerciaux (RAG).
+        Ces documents alimentent l'agent d'entraînement de tes commerciaux (RAG). Un document{" "}
+        <span className="text-emerald-600">indexé</span> est vectorisé et utilisable par l'agent ;{" "}
+        <span className="text-amber-600">non indexé</span> signifie que l'indexation a échoué
+        (service d'embeddings indisponible au moment de l'upload) — utilise « Réindexer ».
       </p>
 
       <form
@@ -247,28 +261,52 @@ function TrainingSection() {
           onChange={(e) => setTitle(e.target.value)}
           className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
         />
+        <div className="flex items-center gap-2">
+          <input
+            key={fileInputKey}
+            type="file"
+            accept=".pdf,.txt,.md,application/pdf,text/plain"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className="text-sm text-zinc-600 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-100 file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-zinc-200"
+          />
+          {file && (
+            <button
+              type="button"
+              onClick={() => {
+                setFile(null);
+                setFileInputKey((k) => k + 1);
+              }}
+              className="text-xs text-zinc-500 hover:text-zinc-800"
+            >
+              Retirer le fichier
+            </button>
+          )}
+        </div>
         <textarea
-          required
+          required={!file}
+          disabled={file !== null}
           minLength={20}
           rows={5}
-          placeholder="Colle ici le contenu texte (argumentaire, fiche produit, politique tarifaire…)"
+          placeholder={
+            file
+              ? "Le contenu sera extrait du fichier sélectionné"
+              : "… ou colle ici le contenu texte (argumentaire, fiche produit, tarifs…)"
+          }
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+          className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:bg-zinc-50 disabled:text-zinc-400"
         />
-        {uploadMutation.isError && (
+        {error && (
           <p className="text-sm text-red-600">
-            {uploadMutation.error instanceof ApiError
-              ? uploadMutation.error.message
-              : "Upload impossible"}
+            {error instanceof ApiError ? error.message : "Upload impossible"}
           </p>
         )}
         <button
           type="submit"
-          disabled={uploadMutation.isPending}
+          disabled={pending}
           className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
         >
-          {uploadMutation.isPending ? "Traitement…" : "Ajouter le document"}
+          {pending ? "Traitement…" : "Ajouter le document"}
         </button>
       </form>
 
@@ -279,30 +317,114 @@ function TrainingSection() {
 
       <ul className="mt-3 space-y-2">
         {(trainingQuery.data ?? []).map((doc) => (
-          <li
-            key={doc.id}
-            className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-4 py-3"
-          >
-            <div>
-              <p className="text-sm font-medium">{doc.title}</p>
-              <p className="text-xs text-zinc-500">
-                {formatDate(doc.created_at)} · {doc.chunk_metadata.chunk_count ?? "?"} segment(s) ·{" "}
-                {doc.is_embedded ? (
-                  <span className="text-emerald-600">indexé</span>
-                ) : (
-                  <span className="text-amber-600">non indexé</span>
-                )}
-              </p>
-            </div>
-            <button
-              onClick={() => deleteMutation.mutate(doc.id)}
-              className="rounded-md border border-red-200 px-2 py-1 text-sm text-red-600 hover:bg-red-50"
-            >
-              Supprimer
-            </button>
-          </li>
+          <TrainingItem key={doc.id} doc={doc} />
         ))}
       </ul>
     </section>
+  );
+}
+
+function TrainingItem({ doc }: { doc: TrainingContent }) {
+  const updateMutation = useUpdateTraining();
+  const reindexMutation = useReindexTraining();
+  const deleteMutation = useDeleteTraining();
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(doc.title);
+  const [content, setContent] = useState(doc.raw_content);
+
+  function handleSave(event: FormEvent) {
+    event.preventDefault();
+    updateMutation.mutate(
+      { contentId: doc.id, title, content },
+      { onSuccess: () => setEditing(false) },
+    );
+  }
+
+  return (
+    <li className="rounded-lg border border-zinc-200 bg-white px-4 py-3">
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm font-medium">{doc.title}</p>
+          <p className="text-xs text-zinc-500">
+            {formatDate(doc.created_at)} · {doc.content_type.toUpperCase()} ·{" "}
+            {doc.chunk_metadata.chunk_count ?? "?"} segment(s) ·{" "}
+            {doc.is_embedded ? (
+              <span className="text-emerald-600">indexé</span>
+            ) : (
+              <span className="text-amber-600">non indexé</span>
+            )}
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-2 text-sm">
+          {!doc.is_embedded && (
+            <button
+              onClick={() => reindexMutation.mutate(doc.id)}
+              disabled={reindexMutation.isPending}
+              className="rounded-md border border-amber-300 px-2 py-1 text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+            >
+              {reindexMutation.isPending ? "Indexation…" : "Réindexer"}
+            </button>
+          )}
+          <button
+            onClick={() => {
+              setTitle(doc.title);
+              setContent(doc.raw_content);
+              setEditing((e) => !e);
+            }}
+            className="rounded-md border border-zinc-300 px-2 py-1 text-zinc-600 hover:bg-zinc-100"
+          >
+            {editing ? "Annuler" : "Modifier"}
+          </button>
+          <button
+            onClick={() => deleteMutation.mutate(doc.id)}
+            className="rounded-md border border-red-200 px-2 py-1 text-red-600 hover:bg-red-50"
+          >
+            Supprimer
+          </button>
+        </div>
+      </div>
+
+      {reindexMutation.isError && (
+        <p className="mt-2 text-sm text-red-600">
+          {reindexMutation.error instanceof ApiError
+            ? reindexMutation.error.message
+            : "Réindexation impossible"}
+        </p>
+      )}
+
+      {editing && (
+        <form onSubmit={handleSave} className="mt-3 space-y-2 border-t border-zinc-100 pt-3">
+          <input
+            required
+            minLength={2}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+          />
+          <textarea
+            required
+            minLength={20}
+            rows={6}
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+          />
+          {updateMutation.isError && (
+            <p className="text-sm text-red-600">
+              {updateMutation.error instanceof ApiError
+                ? updateMutation.error.message
+                : "Modification impossible"}
+            </p>
+          )}
+          <button
+            type="submit"
+            disabled={updateMutation.isPending}
+            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
+          >
+            {updateMutation.isPending ? "Enregistrement…" : "Enregistrer (réindexe le contenu)"}
+          </button>
+        </form>
+      )}
+    </li>
   );
 }
