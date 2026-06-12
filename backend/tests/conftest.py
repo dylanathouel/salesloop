@@ -33,6 +33,7 @@ os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
+from app.core.exceptions import EmbeddingUnavailableError  # noqa: E402
 from app.core.security import create_access_token, hash_password  # noqa: E402
 from app.database import async_session, engine  # noqa: E402
 from app.main import app  # noqa: E402
@@ -41,6 +42,7 @@ from app.models.tenant import Tenant  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.services.llm.base import LLMMessage, LLMProvider, LLMResult  # noqa: E402
 from app.services.llm.dependency import get_llm_provider  # noqa: E402
+from app.services.rag.embeddings import EmbeddingProvider, get_embedding_provider  # noqa: E402
 
 TEST_PASSWORD = "password123"
 # Hash once: bcrypt is intentionally slow
@@ -127,6 +129,36 @@ def fake_llm() -> AsyncGenerator[FakeLLMProvider, None]:
     app.dependency_overrides.pop(get_llm_provider, None)
 
 
+class FakeEmbeddingProvider(EmbeddingProvider):
+    """Deterministic embeddings: keyword-count vectors, so similarity tests
+    are predictable. Set `fail = True` to simulate an outage."""
+
+    KEYWORDS = ("bio", "prix", "conservation", "livraison")
+
+    def __init__(self) -> None:
+        self.fail = False
+        self.calls: list[list[str]] = []
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        if self.fail:
+            raise EmbeddingUnavailableError("Le service d'embeddings est indisponible.")
+        self.calls.append(texts)
+        # The constant last dimension avoids zero vectors (NaN cosine distance)
+        return [
+            [float(text.lower().count(keyword)) for keyword in self.KEYWORDS] + [1.0]
+            for text in texts
+        ]
+
+
+@pytest.fixture(autouse=True)
+def fake_embedder() -> AsyncGenerator[FakeEmbeddingProvider, None]:
+    """Always active: endpoints resolve the embedding dependency eagerly."""
+    fake = FakeEmbeddingProvider()
+    app.dependency_overrides[get_embedding_provider] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_embedding_provider, None)
+
+
 async def _create_tenant(db: AsyncSession, name: str) -> Tenant:
     tenant = Tenant(name=name)
     db.add(tenant)
@@ -196,6 +228,14 @@ async def other_tenant_user(db: AsyncSession) -> User:
 async def other_tenant_manager(db: AsyncSession) -> User:
     other_tenant = await _create_tenant(db, "Tenant B bis")
     return await _create_user(db, other_tenant, _unique_email("manager-b"), role=UserRole.MANAGER)
+
+
+@pytest.fixture
+async def other_tenant_direction(db: AsyncSession) -> User:
+    other_tenant = await _create_tenant(db, "Tenant B ter")
+    return await _create_user(
+        db, other_tenant, _unique_email("direction-b"), role=UserRole.DIRECTION
+    )
 
 
 def auth_headers(user: User) -> dict[str, str]:

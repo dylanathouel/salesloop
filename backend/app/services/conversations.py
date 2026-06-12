@@ -19,8 +19,9 @@ from app.models.message import Message
 from app.models.user import User
 from app.services import directives as directives_service
 from app.services import extraction
-from app.services.agents import collector
+from app.services.agents import collector, trainer
 from app.services.llm.base import LLMMessage, LLMProvider
+from app.services.rag.embeddings import EmbeddingProvider
 
 
 async def _is_in_team(db: AsyncSession, manager: User, member_id: uuid.UUID) -> bool:
@@ -61,19 +62,20 @@ def _require_owner(conversation: Conversation, current_user: User) -> None:
 async def create_conversation(
     db: AsyncSession,
     llm: LLMProvider,
+    embedder: EmbeddingProvider,
     current_user: User,
     agent_type: AgentType,
-) -> tuple[Conversation, Message | None]:
-    """Start a new conversation; the collector opens with a generated message.
+) -> tuple[Conversation, Message]:
+    """Start a new conversation; the agent opens with a generated message.
 
     The opening is generated before anything is persisted: if the LLM is
-    down, no half-created conversation is left behind. The trainer agent
-    has no opening yet (it arrives with the RAG phase).
+    down, no half-created conversation is left behind.
     """
-    opening = None
     if agent_type == AgentType.COLLECTOR:
         directives = await directives_service.get_active_contents(db, current_user.tenant_id)
         opening = await collector.generate_opening(llm, current_user, directives)
+    else:
+        opening = await trainer.generate_opening(llm, embedder, db, current_user)
 
     conversation = Conversation(
         tenant_id=current_user.tenant_id,
@@ -83,21 +85,18 @@ async def create_conversation(
     db.add(conversation)
     await db.flush()
 
-    first_message: Message | None = None
-    if opening is not None:
-        first_message = Message(
-            conversation_id=conversation.id,
-            sender=MessageSender.AGENT,
-            content=opening.content,
-            token_count=opening.completion_tokens,
-        )
-        db.add(first_message)
-        conversation.total_tokens += opening.total_tokens
+    first_message = Message(
+        conversation_id=conversation.id,
+        sender=MessageSender.AGENT,
+        content=opening.content,
+        token_count=opening.completion_tokens,
+    )
+    db.add(first_message)
+    conversation.total_tokens += opening.total_tokens
 
     await db.commit()
     await db.refresh(conversation)
-    if first_message is not None:
-        await db.refresh(first_message)
+    await db.refresh(first_message)
     return conversation, first_message
 
 
@@ -149,6 +148,7 @@ async def _load_history(db: AsyncSession, conversation_id: uuid.UUID) -> list[LL
 async def send_message(
     db: AsyncSession,
     llm: LLMProvider,
+    embedder: EmbeddingProvider,
     current_user: User,
     conversation_id: uuid.UUID,
     content: str,
@@ -166,8 +166,13 @@ async def send_message(
     await db.flush()
 
     history = await _load_history(db, conversation.id)
-    directives = await directives_service.get_active_contents(db, current_user.tenant_id)
-    reply = await collector.generate_reply(llm, current_user, history, directives)
+    if conversation.agent_type == AgentType.COLLECTOR:
+        directives = await directives_service.get_active_contents(db, current_user.tenant_id)
+        reply = await collector.generate_reply(llm, current_user, history, directives)
+    else:
+        reply = await trainer.generate_reply(
+            llm, embedder, db, current_user, history, query=content
+        )
 
     agent_message = Message(
         conversation_id=conversation.id,
@@ -199,12 +204,14 @@ async def close_conversation(
     if conversation.status == ConversationStatus.COMPLETED:
         raise InvalidStateError("Conversation déjà clôturée")
 
-    history = await _load_history(db, conversation.id)
-    extracted, tokens_used = await extraction.extract_conversation_data(llm, history)
+    # Structured extraction only makes sense for debriefings (collector)
+    if conversation.agent_type == AgentType.COLLECTOR:
+        history = await _load_history(db, conversation.id)
+        extracted, tokens_used = await extraction.extract_conversation_data(llm, history)
+        conversation.extracted_data = extracted
+        conversation.total_tokens += tokens_used
 
     conversation.status = ConversationStatus.COMPLETED
-    conversation.extracted_data = extracted
-    conversation.total_tokens += tokens_used
     conversation.ended_at = datetime.now(UTC)
 
     await db.commit()

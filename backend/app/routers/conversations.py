@@ -16,11 +16,13 @@ from app.schemas.conversations import (
 from app.services import conversations as conversations_service
 from app.services.llm.base import LLMProvider
 from app.services.llm.dependency import get_llm_provider
+from app.services.rag.embeddings import EmbeddingProvider, get_embedding_provider
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 Llm = Annotated[LLMProvider, Depends(get_llm_provider)]
+Embedder = Annotated[EmbeddingProvider, Depends(get_embedding_provider)]
 
 
 @router.post("/", response_model=ConversationStartResponse, status_code=status.HTTP_201_CREATED)
@@ -29,13 +31,13 @@ async def create_conversation(
     current_user: CurrentUser,
     db: DbSession,
     llm: Llm,
+    embedder: Embedder,
 ) -> ConversationStartResponse:
     conversation, first_message = await conversations_service.create_conversation(
-        db, llm, current_user, data.agent_type
+        db, llm, embedder, current_user, data.agent_type
     )
     response = ConversationStartResponse.model_validate(conversation)
-    if first_message is not None:
-        response.first_message = MessageResponse.model_validate(first_message)
+    response.first_message = MessageResponse.model_validate(first_message)
     return response
 
 
@@ -69,9 +71,10 @@ async def add_message(
     current_user: CurrentUser,
     db: DbSession,
     llm: Llm,
+    embedder: Embedder,
 ) -> list[MessageResponse]:
     user_message, agent_message = await conversations_service.send_message(
-        db, llm, current_user, conversation_id, data.content
+        db, llm, embedder, current_user, conversation_id, data.content
     )
     return [
         MessageResponse.model_validate(user_message),

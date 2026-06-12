@@ -46,15 +46,15 @@ async def test_collector_opens_the_conversation(
     assert [m["sender"] for m in listing.json()] == ["agent"]
 
 
-async def test_trainer_conversation_has_no_opening_yet(
+async def test_trainer_conversation_opens_too(
     client: httpx.AsyncClient, commercial: User, fake_llm: FakeLLMProvider
 ) -> None:
+    fake_llm.enqueue("Prêt pour un entraînement ?")
     response = await client.post(
         "/conversations/", json={"agent_type": "trainer"}, headers=auth_headers(commercial)
     )
     assert response.status_code == 201
-    assert response.json()["first_message"] is None
-    assert fake_llm.calls == []
+    assert response.json()["first_message"]["content"] == "Prêt pour un entraînement ?"
 
 
 async def test_full_collector_flow(

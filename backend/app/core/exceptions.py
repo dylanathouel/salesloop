@@ -38,3 +38,9 @@ class LLMUnavailableError(AppError):
     """Raised when the LLM provider is down after retries."""
 
     status_code = 503
+
+
+class EmbeddingUnavailableError(AppError):
+    """Raised when the embedding provider is down or not configured."""
+
+    status_code = 503

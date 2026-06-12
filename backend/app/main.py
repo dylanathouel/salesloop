@@ -11,18 +11,21 @@ from app.config import settings
 from app.core.exceptions import AppError
 from app.core.ratelimit import limiter
 from app.database import engine
-from app.routers import auth, conversations, directives, health, reports, users
+from app.routers import auth, conversations, directives, health, reports, training, users
 from app.services.llm.client import OpenRouterProvider
+from app.services.rag.embeddings import OpenAICompatibleEmbeddingProvider
 
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    # One shared LLM provider (and underlying HTTP client) for the app lifetime
+    # Shared providers (and underlying HTTP clients) for the app lifetime
     app.state.llm_provider = OpenRouterProvider()
+    app.state.embedding_provider = OpenAICompatibleEmbeddingProvider()
     yield
     await app.state.llm_provider.aclose()
+    await app.state.embedding_provider.aclose()
     await engine.dispose()
 
 
@@ -50,6 +53,7 @@ def create_app() -> FastAPI:
     app.include_router(conversations.router)
     app.include_router(directives.router)
     app.include_router(reports.router)
+    app.include_router(training.router)
 
     @app.exception_handler(AppError)
     async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:

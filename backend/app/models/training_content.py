@@ -10,6 +10,7 @@ from app.database import Base
 
 if TYPE_CHECKING:
     from app.models.tenant import Tenant
+    from app.models.training_chunk import TrainingChunk
 
 
 class TrainingContent(Base):
@@ -28,3 +29,6 @@ class TrainingContent(Base):
 
     # Relations
     tenant: Mapped["Tenant"] = relationship(back_populates="training_contents")
+    chunks: Mapped[list["TrainingChunk"]] = relationship(
+        back_populates="training_content", cascade="all, delete-orphan"
+    )

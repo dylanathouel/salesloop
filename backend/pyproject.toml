@@ -28,7 +28,7 @@ warn_unused_ignores = true
 warn_redundant_casts = true
 
 [[tool.mypy.overrides]]
-module = ["jose.*", "passlib.*"]
+module = ["jose.*", "passlib.*", "pgvector.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

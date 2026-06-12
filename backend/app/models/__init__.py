@@ -3,6 +3,7 @@ from app.models.directive import Directive
 from app.models.message import Message
 from app.models.report import Report, report_conversation
 from app.models.tenant import Tenant
+from app.models.training_chunk import TrainingChunk
 from app.models.training_content import TrainingContent
 from app.models.user import User
 
@@ -12,6 +13,7 @@ __all__ = [
     "Message",
     "Report",
     "Tenant",
+    "TrainingChunk",
     "TrainingContent",
     "User",
     "report_conversation",

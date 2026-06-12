@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 60.0
     llm_max_retries: int = 2
 
+    # Embeddings (any OpenAI-compatible endpoint; key empty = RAG disabled,
+    # uploads are stored unembedded and the trainer works without retrieval)
+    embedding_base_url: str = "https://api.openai.com/v1"
+    embedding_api_key: str = ""
+    embedding_model: str = "text-embedding-3-small"
+
     # HTTP
     cors_origins: str = "http://localhost:5173"
 
