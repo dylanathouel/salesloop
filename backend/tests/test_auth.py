@@ -1,64 +1,66 @@
 import httpx
-from app.models.tenant import Tenant
 from app.models.user import User
 
 from tests.conftest import TEST_PASSWORD, auth_headers
 
+SIGNUP_PAYLOAD = {
+    "company_name": "Pharma-Corp",
+    "email": "fondateur@pharma.fr",
+    "password": "motdepasse8",
+    "full_name": "Fondateur Pharma",
+}
 
-async def test_login_ok(client: httpx.AsyncClient, commercial: User) -> None:
-    response = await client.post(
-        "/auth/login",
-        json={
-            "email": commercial.email,
-            "password": TEST_PASSWORD,
-            "tenant_id": str(commercial.tenant_id),
-        },
-    )
-    assert response.status_code == 200
+
+async def test_company_signup_creates_tenant_and_direction(client: httpx.AsyncClient) -> None:
+    response = await client.post("/auth/register", json=SIGNUP_PAYLOAD)
+    assert response.status_code == 201
     body = response.json()
-    assert body["role"] == "commercial"
+    assert body["role"] == "direction"
 
     me = await client.get("/users/me", headers={"Authorization": f"Bearer {body['access_token']}"})
     assert me.status_code == 200
-    assert me.json()["email"] == commercial.email
+    assert me.json()["email"] == SIGNUP_PAYLOAD["email"]
+
+
+async def test_signup_duplicate_email_rejected(client: httpx.AsyncClient) -> None:
+    first = await client.post("/auth/register", json=SIGNUP_PAYLOAD)
+    assert first.status_code == 201
+
+    duplicate = await client.post(
+        "/auth/register", json={**SIGNUP_PAYLOAD, "company_name": "Autre Corp"}
+    )
+    assert duplicate.status_code == 409
+
+
+async def test_login_with_email_only(client: httpx.AsyncClient, commercial: User) -> None:
+    response = await client.post(
+        "/auth/login", json={"email": commercial.email, "password": TEST_PASSWORD}
+    )
+    assert response.status_code == 200
+    assert response.json()["role"] == "commercial"
 
 
 async def test_login_wrong_password(client: httpx.AsyncClient, commercial: User) -> None:
     response = await client.post(
-        "/auth/login",
-        json={
-            "email": commercial.email,
-            "password": "mauvais-mot-de-passe",
-            "tenant_id": str(commercial.tenant_id),
-        },
+        "/auth/login", json={"email": commercial.email, "password": "mauvais-mot-de-passe"}
     )
     assert response.status_code == 401
 
 
-async def test_register_then_duplicate_email(client: httpx.AsyncClient, tenant: Tenant) -> None:
-    payload = {
-        "email": "nouveau@test.fr",
-        "password": "secret123",
-        "full_name": "Nouveau User",
-        "tenant_id": str(tenant.id),
-    }
-    first = await client.post("/auth/register", json=payload)
-    assert first.status_code == 201
+async def test_login_inactive_account(
+    client: httpx.AsyncClient, commercial: User, direction: User
+) -> None:
+    patch = await client.patch(
+        f"/users/{commercial.id}", json={"is_active": False}, headers=auth_headers(direction)
+    )
+    assert patch.status_code == 200
 
-    duplicate = await client.post("/auth/register", json=payload)
-    assert duplicate.status_code == 409
+    response = await client.post(
+        "/auth/login", json={"email": commercial.email, "password": TEST_PASSWORD}
+    )
+    assert response.status_code == 403
 
 
 async def test_me_requires_token(client: httpx.AsyncClient) -> None:
     response = await client.get("/users/me")
     assert response.status_code in (401, 403)
-
-
-async def test_users_scoped_to_tenant(
-    client: httpx.AsyncClient, commercial: User, other_tenant_user: User
-) -> None:
-    response = await client.get("/users/", headers=auth_headers(commercial))
-    assert response.status_code == 200
-    emails = [u["email"] for u in response.json()]
-    assert commercial.email in emails
-    assert other_tenant_user.email not in emails

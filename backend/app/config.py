@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     # HTTP
     cors_origins: str = "http://localhost:5173"
 
+    # Rate limiting (slowapi format, e.g. "10/minute")
+    auth_rate_limit: str = "10/minute"
+    rate_limit_enabled: bool = True
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]

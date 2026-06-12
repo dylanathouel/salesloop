@@ -22,6 +22,8 @@ os.environ.setdefault(
 os.environ.setdefault("JWT_SECRET", "test-secret")
 os.environ.setdefault("OPENROUTER_API_KEY", "test-key")
 os.environ.setdefault("OPENROUTER_MODEL", "test-model")
+# Rate limiting off by default; the dedicated test re-enables it explicitly
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 
 _ADMIN_URL = os.environ["DATABASE_URL"]
 _BASE, _DB_NAME = _ADMIN_URL.rsplit("/", 1)
@@ -138,6 +140,7 @@ async def _create_user(
     tenant: Tenant,
     email: str,
     role: UserRole = UserRole.COMMERCIAL,
+    manager_id: uuid.UUID | None = None,
 ) -> User:
     user = User(
         tenant_id=tenant.id,
@@ -145,11 +148,16 @@ async def _create_user(
         full_name="Test User",
         password_hash=TEST_PASSWORD_HASH,
         role=role,
+        manager_id=manager_id,
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
     return user
+
+
+def _unique_email(prefix: str) -> str:
+    return f"{prefix}-{uuid.uuid4().hex[:8]}@test.fr"
 
 
 @pytest.fixture
@@ -159,13 +167,29 @@ async def tenant(db: AsyncSession) -> Tenant:
 
 @pytest.fixture
 async def commercial(db: AsyncSession, tenant: Tenant) -> User:
-    return await _create_user(db, tenant, f"commercial-{uuid.uuid4().hex[:8]}@test.fr")
+    return await _create_user(db, tenant, _unique_email("commercial"))
+
+
+@pytest.fixture
+async def direction(db: AsyncSession, tenant: Tenant) -> User:
+    return await _create_user(db, tenant, _unique_email("direction"), role=UserRole.DIRECTION)
+
+
+@pytest.fixture
+async def manager(db: AsyncSession, tenant: Tenant) -> User:
+    return await _create_user(db, tenant, _unique_email("manager"), role=UserRole.MANAGER)
+
+
+@pytest.fixture
+async def team_commercial(db: AsyncSession, tenant: Tenant, manager: User) -> User:
+    """A commercial attached to the `manager` fixture's team."""
+    return await _create_user(db, tenant, _unique_email("equipier"), manager_id=manager.id)
 
 
 @pytest.fixture
 async def other_tenant_user(db: AsyncSession) -> User:
     other_tenant = await _create_tenant(db, "Tenant B")
-    return await _create_user(db, other_tenant, f"intrus-{uuid.uuid4().hex[:8]}@test.fr")
+    return await _create_user(db, other_tenant, _unique_email("intrus"))
 
 
 def auth_headers(user: User) -> dict[str, str]:

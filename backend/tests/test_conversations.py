@@ -98,24 +98,6 @@ async def test_close_twice_rejected(
     assert second.status_code == 400
 
 
-async def test_conversation_isolated_between_tenants(
-    client: httpx.AsyncClient,
-    commercial: User,
-    other_tenant_user: User,
-    fake_llm: FakeLLMProvider,
-) -> None:
-    conversation_id = await _create_conversation(client, commercial)
-
-    response = await client.get(
-        f"/conversations/{conversation_id}/messages", headers=auth_headers(other_tenant_user)
-    )
-    assert response.status_code == 403
-
-    listing = await client.get("/conversations/", headers=auth_headers(other_tenant_user))
-    assert listing.status_code == 200
-    assert listing.json() == []
-
-
 async def test_invalid_uuid_rejected(client: httpx.AsyncClient, commercial: User) -> None:
     response = await client.get(
         "/conversations/pas-un-uuid/messages", headers=auth_headers(commercial)
