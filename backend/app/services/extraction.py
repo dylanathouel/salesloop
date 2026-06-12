@@ -41,7 +41,7 @@ class ExtractedData(BaseModel):
     follow_up_note: str | None = None
 
 
-def _strip_code_fences(raw: str) -> str:
+def strip_code_fences(raw: str) -> str:
     text = raw.strip()
     if text.startswith("```"):
         text = text.split("\n", 1)[1] if "\n" in text else ""
@@ -51,7 +51,7 @@ def _strip_code_fences(raw: str) -> str:
 
 
 def _parse(raw: str) -> dict[str, Any]:
-    return ExtractedData.model_validate(json.loads(_strip_code_fences(raw))).model_dump()
+    return ExtractedData.model_validate(json.loads(strip_code_fences(raw))).model_dump()
 
 
 def _transcript(messages: list[LLMMessage]) -> str:

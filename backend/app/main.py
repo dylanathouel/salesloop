@@ -11,7 +11,7 @@ from app.config import settings
 from app.core.exceptions import AppError
 from app.core.ratelimit import limiter
 from app.database import engine
-from app.routers import auth, conversations, health, users
+from app.routers import auth, conversations, directives, health, reports, users
 from app.services.llm.client import OpenRouterProvider
 
 logger = logging.getLogger(__name__)
@@ -48,6 +48,8 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(users.router)
     app.include_router(conversations.router)
+    app.include_router(directives.router)
+    app.include_router(reports.router)
 
     @app.exception_handler(AppError)
     async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:

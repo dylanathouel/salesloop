@@ -192,6 +192,12 @@ async def other_tenant_user(db: AsyncSession) -> User:
     return await _create_user(db, other_tenant, _unique_email("intrus"))
 
 
+@pytest.fixture
+async def other_tenant_manager(db: AsyncSession) -> User:
+    other_tenant = await _create_tenant(db, "Tenant B bis")
+    return await _create_user(db, other_tenant, _unique_email("manager-b"), role=UserRole.MANAGER)
+
+
 def auth_headers(user: User) -> dict[str, str]:
     token = create_access_token(
         {"sub": str(user.id), "role": user.role.value, "tenant_id": str(user.tenant_id)}

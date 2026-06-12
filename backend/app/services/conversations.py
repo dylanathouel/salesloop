@@ -17,6 +17,7 @@ from app.models.conversation import Conversation
 from app.models.enums import AgentType, ConversationStatus, MessageSender, UserRole
 from app.models.message import Message
 from app.models.user import User
+from app.services import directives as directives_service
 from app.services import extraction
 from app.services.agents import collector
 from app.services.llm.base import LLMMessage, LLMProvider
@@ -71,7 +72,8 @@ async def create_conversation(
     """
     opening = None
     if agent_type == AgentType.COLLECTOR:
-        opening = await collector.generate_opening(llm, current_user)
+        directives = await directives_service.get_active_contents(db, current_user.tenant_id)
+        opening = await collector.generate_opening(llm, current_user, directives)
 
     conversation = Conversation(
         tenant_id=current_user.tenant_id,
@@ -164,7 +166,8 @@ async def send_message(
     await db.flush()
 
     history = await _load_history(db, conversation.id)
-    reply = await collector.generate_reply(llm, current_user, history)
+    directives = await directives_service.get_active_contents(db, current_user.tenant_id)
+    reply = await collector.generate_reply(llm, current_user, history, directives)
 
     agent_message = Message(
         conversation_id=conversation.id,
