@@ -17,6 +17,27 @@ from app.services.rag.embeddings import OpenAICompatibleEmbeddingProvider
 
 logger = logging.getLogger(__name__)
 
+DESCRIPTION = """
+API de **SalesLoop AI** — agents conversationnels IA pour équipes commerciales.
+
+Authentification par **JWT Bearer** : crée un espace via `POST /auth/register`,
+puis connecte-toi via `POST /auth/login` et clique sur **Authorize** avec le
+token renvoyé. Toutes les ressources sont isolées par tenant.
+"""
+
+TAGS_METADATA = [
+    {"name": "auth", "description": "Inscription entreprise, connexion, création de comptes."},
+    {"name": "users", "description": "Profil courant et gestion des utilisateurs (scopé rôle)."},
+    {"name": "conversations", "description": "Sessions avec les agents Collector et Trainer."},
+    {"name": "directives", "description": "Consignes du management injectées dans les agents."},
+    {"name": "reports", "description": "Rapports périodiques générés par LLM (manager+)."},
+    {
+        "name": "training",
+        "description": "Contenus de formation (RAG) : upload texte/PDF, indexation.",
+    },
+    {"name": "health", "description": "Disponibilité du service et de la base."},
+]
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -32,9 +53,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 def create_app() -> FastAPI:
     app = FastAPI(
         title="SalesLoop AI",
-        description="Plateforme d'agents conversationnels pour équipes commerciales",
+        description=DESCRIPTION,
         version="0.1.0",
         lifespan=lifespan,
+        openapi_tags=TAGS_METADATA,
     )
 
     app.state.limiter = limiter

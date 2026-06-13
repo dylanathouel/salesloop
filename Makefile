@@ -1,7 +1,7 @@
 # Common commands for SalesLoop AI. Backend tooling (test/lint) runs locally:
 # create a venv with `make venv` first.
 
-.PHONY: up down logs migrate makemigration test test-frontend lint format venv
+.PHONY: up down logs migrate makemigration seed seed-fresh test test-frontend lint format venv
 
 up:
 	docker compose up -d --build
@@ -18,6 +18,13 @@ migrate:
 # Usage: make makemigration m="add some table"
 makemigration:
 	docker compose exec backend alembic revision --autogenerate -m "$(m)"
+
+# Demo data: tenant + users + closed debriefings + directives + training
+seed:
+	docker compose exec backend python -m app.seed
+
+seed-fresh:
+	docker compose exec backend python -m app.seed --fresh
 
 # Loads .env so the test run targets the docker Postgres (host port 5433)
 test:
