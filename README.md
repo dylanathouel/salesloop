@@ -6,8 +6,11 @@ Plateforme SaaS multi-tenant d'agents conversationnels IA pour équipes commerci
   structurée (résultat, objections, concurrents, lacunes produit) en fin de conversation.
 - **Agent Trainer** : coach commercial s'appuyant sur les contenus de formation
   du tenant (RAG pgvector) et les lacunes détectées par le Collector.
-- **Dashboard manager** : conversations d'équipe, rapports LLM périodiques, directives.
-- **Admin direction** : gestion des utilisateurs, upload des contenus de formation.
+- **Dashboard manager** : conversations d'équipe (KPI, graphiques, recherche & filtres),
+  rapports LLM périodiques, directives.
+- **Admin direction** : gestion des utilisateurs, upload des contenus de formation (texte/PDF).
+- **Interface** : thème clair/sombre, navigation latérale, page profil (changement de mot de passe),
+  notifications toast — composants maison, sans lib UI lourde.
 
 ## Stack
 

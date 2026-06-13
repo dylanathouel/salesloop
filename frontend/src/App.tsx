@@ -3,17 +3,23 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import { Layout } from "./components/Layout";
 import { Protected } from "./components/Protected";
+import { Spinner } from "./components/ui/Spinner";
 import { AdminPage } from "./pages/AdminPage";
 import { ChatPage } from "./pages/ChatPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
+import { ProfilePage } from "./pages/ProfilePage";
 import { SignupPage } from "./pages/SignupPage";
 
 export default function App() {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
-    return <div className="flex h-screen items-center justify-center text-zinc-500">Chargement…</div>;
+    return (
+      <div className="flex h-screen items-center justify-center text-zinc-500 dark:text-zinc-400">
+        <Spinner className="h-6 w-6" />
+      </div>
+    );
   }
 
   return (
@@ -34,6 +40,14 @@ export default function App() {
           element={
             <Protected>
               <ChatPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <Protected>
+              <ProfilePage />
             </Protected>
           }
         />

@@ -9,11 +9,11 @@ import uuid
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ForbiddenError, NotFoundError
-from app.core.security import hash_password
+from app.core.exceptions import ForbiddenError, NotFoundError, UnauthorizedError
+from app.core.security import hash_password, verify_password
 from app.models.enums import UserRole
 from app.models.user import User
-from app.schemas.users import UserCreateRequest, UserUpdateRequest
+from app.schemas.users import PasswordChangeRequest, UserCreateRequest, UserUpdateRequest
 from app.services.auth import ensure_email_available
 
 
@@ -111,3 +111,11 @@ async def update_user(
     await db.commit()
     await db.refresh(target)
     return target
+
+
+async def change_password(db: AsyncSession, user: User, data: PasswordChangeRequest) -> None:
+    """Change the current user's password after verifying the old one."""
+    if not verify_password(data.old_password, user.password_hash):
+        raise UnauthorizedError("Mot de passe actuel incorrect")
+    user.password_hash = hash_password(data.new_password)
+    await db.commit()

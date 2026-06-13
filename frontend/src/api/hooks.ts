@@ -57,6 +57,13 @@ export function useUpdateUser() {
   });
 }
 
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: (body: { old_password: string; new_password: string }) =>
+      api<void>("/users/me/password", { method: "POST", body }),
+  });
+}
+
 // --- Conversations -----------------------------------------------------
 
 export function useConversations() {

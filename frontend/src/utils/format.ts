@@ -1,5 +1,6 @@
 // Pure presentation helpers (unit-tested with Vitest).
 
+import type { BadgeTone } from "../components/ui/Badge";
 import type { ExtractedData } from "../api/types";
 
 export function formatDate(iso: string): string {
@@ -27,6 +28,24 @@ const SENTIMENT_STYLES: Record<string, string> = {
 
 export function sentimentStyle(sentiment: string | null | undefined): string {
   return SENTIMENT_STYLES[sentiment ?? ""] ?? "bg-zinc-100 text-zinc-600";
+}
+
+const SENTIMENT_TONES: Record<string, BadgeTone> = {
+  positif: "emerald",
+  mitigé: "amber",
+  négatif: "red",
+};
+
+export function sentimentTone(sentiment: string | null | undefined): BadgeTone {
+  return SENTIMENT_TONES[sentiment ?? ""] ?? "neutral";
+}
+
+export function statusTone(status: string): BadgeTone {
+  return status === "active" ? "emerald" : status === "abandoned" ? "red" : "neutral";
+}
+
+export function priorityTone(priority: string): BadgeTone {
+  return priority === "high" ? "red" : priority === "medium" ? "amber" : "neutral";
 }
 
 const RESULT_LABELS: Record<string, string> = {

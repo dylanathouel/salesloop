@@ -33,3 +33,8 @@ class UserUpdateRequest(BaseModel):
 
     is_active: bool | None = None
     manager_id: uuid.UUID | None = None
+
+
+class PasswordChangeRequest(BaseModel):
+    old_password: str
+    new_password: str = Field(min_length=8)

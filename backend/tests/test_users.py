@@ -1,9 +1,9 @@
-"""User creation (/auth/users), patching and role-scoped listing."""
+"""User creation (/auth/users), patching, role-scoped listing, password change."""
 
 import httpx
 from app.models.user import User
 
-from tests.conftest import auth_headers
+from tests.conftest import TEST_PASSWORD, auth_headers
 
 
 def _payload(email: str, role: str = "commercial", **extra: object) -> dict[str, object]:
@@ -125,3 +125,43 @@ async def test_listing_scoped_by_role(
     as_direction = await client.get("/users/", headers=auth_headers(direction))
     ids = {u["id"] for u in as_direction.json()}
     assert ids == {str(direction.id), str(manager.id), str(team_commercial.id), str(commercial.id)}
+
+
+async def test_change_password_then_login_with_new(
+    client: httpx.AsyncClient, commercial: User
+) -> None:
+    response = await client.post(
+        "/users/me/password",
+        json={"old_password": TEST_PASSWORD, "new_password": "nouveaumotdepasse"},
+        headers=auth_headers(commercial),
+    )
+    assert response.status_code == 204
+
+    # Old password no longer works, new one does
+    old = await client.post(
+        "/auth/login", json={"email": commercial.email, "password": TEST_PASSWORD}
+    )
+    assert old.status_code == 401
+    new = await client.post(
+        "/auth/login", json={"email": commercial.email, "password": "nouveaumotdepasse"}
+    )
+    assert new.status_code == 200
+
+
+async def test_change_password_wrong_old_rejected(
+    client: httpx.AsyncClient, commercial: User
+) -> None:
+    response = await client.post(
+        "/users/me/password",
+        json={"old_password": "pas-le-bon", "new_password": "nouveaumotdepasse"},
+        headers=auth_headers(commercial),
+    )
+    assert response.status_code == 401
+
+
+async def test_change_password_requires_auth(client: httpx.AsyncClient) -> None:
+    response = await client.post(
+        "/users/me/password",
+        json={"old_password": "x", "new_password": "nouveaumotdepasse"},
+    )
+    assert response.status_code in (401, 403)

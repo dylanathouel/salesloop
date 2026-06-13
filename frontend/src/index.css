@@ -1,5 +1,23 @@
 @import "tailwindcss";
 
-body {
-  @apply bg-zinc-100 text-zinc-900 antialiased;
+/* Class-based dark mode (toggled on <html> by ThemeContext) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  html {
+    color-scheme: light dark;
+  }
+  body {
+    @apply bg-zinc-50 text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
+  }
+}
+
+/* Smooth theme transitions on surfaces, borders and text */
+@layer base {
+  *,
+  ::before,
+  ::after {
+    transition-property: background-color, border-color, color, fill;
+    transition-duration: 150ms;
+  }
 }

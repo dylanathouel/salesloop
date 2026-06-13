@@ -3,6 +3,9 @@ import { Link } from "react-router-dom";
 
 import { ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { Button } from "../components/ui/Button";
+import { Card } from "../components/ui/Card";
+import { Field, Input } from "../components/ui/Field";
 
 export function SignupPage() {
   const { signup } = useAuth();
@@ -34,53 +37,48 @@ export function SignupPage() {
   }
 
   const fields = [
-    { key: "company_name" as const, label: "Nom de l'entreprise", type: "text" },
-    { key: "full_name" as const, label: "Ton nom complet", type: "text" },
-    { key: "email" as const, label: "Email", type: "email" },
-    { key: "password" as const, label: "Mot de passe (8 caractères min.)", type: "password" },
+    { key: "company_name" as const, label: "Nom de l'entreprise", type: "text", min: 2 },
+    { key: "full_name" as const, label: "Ton nom complet", type: "text", min: 2 },
+    { key: "email" as const, label: "Email", type: "email", min: undefined },
+    { key: "password" as const, label: "Mot de passe (8 caractères min.)", type: "password", min: 8 },
   ];
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-8 shadow-sm">
+      <Card className="w-full max-w-sm p-8">
         <h1 className="text-xl font-semibold">Inscription entreprise</h1>
-        <p className="mt-1 text-sm text-zinc-500">
+        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
           Crée ton espace SalesLoop — tu seras le compte direction.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           {fields.map((field) => (
-            <label key={field.key} className="block text-sm">
-              <span className="text-zinc-700">{field.label}</span>
-              <input
+            <Field
+              key={field.key}
+              label={field.label}
+              error={field.key === "password" ? error : undefined}
+            >
+              <Input
                 type={field.type}
                 required
-                minLength={field.key === "password" ? 8 : 2}
+                minLength={field.min}
                 value={form[field.key]}
                 onChange={update(field.key)}
-                className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 focus:border-emerald-500 focus:outline-none"
               />
-            </label>
+            </Field>
           ))}
-
-          {error && <p className="text-sm text-red-600">{error}</p>}
-
-          <button
-            type="submit"
-            disabled={pending}
-            className="w-full rounded-md bg-zinc-900 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
-          >
-            {pending ? "Création…" : "Créer l'espace"}
-          </button>
+          <Button type="submit" loading={pending} className="w-full">
+            Créer l'espace
+          </Button>
         </form>
 
-        <p className="mt-4 text-center text-sm text-zinc-500">
+        <p className="mt-4 text-center text-sm text-zinc-500 dark:text-zinc-400">
           Déjà un compte ?{" "}
-          <Link to="/login" className="font-medium text-emerald-700 hover:underline">
+          <Link to="/login" className="font-medium text-emerald-700 hover:underline dark:text-emerald-400">
             Se connecter
           </Link>
         </p>
-      </div>
+      </Card>
     </div>
   );
 }
